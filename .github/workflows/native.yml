@@ -7,6 +7,7 @@ on:
 
 env:
   NDK_VERSION: r28c
+  # Поставьте ту же версию Zig, что у вас локально
   ZIG_VERSION: 0.17.0
 
 jobs:
@@ -94,11 +95,13 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - uses: android-actions/setup-android@v3
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
 
-      - name: Install Android SDK platform, build-tools and NDK
+      - name: Install Android platform, build-tools and NDK
         run: |
           yes | sdkmanager --licenses > /dev/null
           sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358"
