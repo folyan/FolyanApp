@@ -4,6 +4,7 @@
 #   libfolyan_convert.so <- converter_capi.zig
 #   libfolyan_stego.so   <- stego_capi.zig
 #
+# -fstrip: символы выкидываются на этапе линковки (меньше .so, без лишнего дебаг-мусора).
 # Использование: ./build_libs.sh [output_dir]   (запускать из каталога zig/)
 # Нужен zig в PATH. ANDROID_TARGET и OPTIMIZE можно переопределить.
 
@@ -23,6 +24,7 @@ build() {
         -target "$TARGET" \
         -O "$OPT" \
         -fPIC \
+        -fstrip \
         -femit-bin="$OUT/$name" \
         -fno-emit-h
 }
