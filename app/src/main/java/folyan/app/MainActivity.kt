@@ -460,7 +460,7 @@ class MainActivity : ComponentActivity() {
                 val d = dir.text.toString().ifBlank { downloadsDir }
                 val v = convSrc
                 val a = convSrc2
-                if (v == `null`) {
+                if (v == null) {
                     out.text = "Выбери файл"
                     return@button
                 }
