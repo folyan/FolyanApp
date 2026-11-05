@@ -92,7 +92,7 @@ build_x264() {
 
 # ---- зависимости ffmpeg ----
 fetch "https://downloads.sourceforge.net/project/lame/lame/${LAME_VERSION}/lame-${LAME_VERSION}.tar.gz"
-fetch "https://archive.mozilla.org/pub/opus/opus-${OPUS_VERSION}.tar.gz"
+fetch "https://github.com/xiph/opus/releases/download/v${OPUS_VERSION}/opus-${OPUS_VERSION}.tar.gz"
 fetch "https://github.com/xiph/ogg/releases/download/v1.3.5/libogg-${OGG_VERSION}.tar.gz"
 fetch "https://github.com/xiph/vorbis/releases/download/v1.3.7/libvorbis-${VORBIS_VERSION}.tar.gz"
 
