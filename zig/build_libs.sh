@@ -2,7 +2,6 @@
 set -euo pipefail
 
 OUT="${1:-libs/arm64-v8a}"
-# musl компилирует автономный .so без внешних костылей bionic и getauxval
 TARGET="aarch64-linux-musl"
 OPT="${OPTIMIZE:-ReleaseSafe}"
 

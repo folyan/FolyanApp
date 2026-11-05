@@ -1,5 +1,7 @@
 package folyan.app
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -15,6 +17,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.DecelerateInterpolator
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
@@ -34,6 +37,7 @@ import com.google.android.material.color.DynamicColors
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.Executors
+import kotlin.random.Random
 
 private val DOWNLOAD_HEIGHTS = listOf(144, 240, 360, 480, 720, 1080)
 private val DOWNLOAD_CODECS = listOf("vp", "avc1", "av01")
@@ -109,6 +113,8 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
     private fun setScreen(view: View) {
         content.removeAllViews()
         content.addView(view)
@@ -119,38 +125,39 @@ class MainActivity : ComponentActivity() {
         progressView = null
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(48, 48, 48, 48)
+            setPadding(dp(20), dp(20), dp(20), dp(20))
         }
         if (!menu) box.button("← Меню") { showMenu() }
-        
+
         if (menu) {
             box.addCoin()
         } else {
             box.label(title).apply {
-                textSize = 22f
+                textSize = 20f
                 typeface = Typeface.DEFAULT_BOLD
             }
         }
-        
+
         box.build()
         return ScrollView(this).apply { addView(box) }
     }
 
-    // Монетка: крутится через масштабирование scaleX и меняет 0 на 1
+    // Интерактивная монетка: быстрый фоновый спин + турбо-вращение при тапе
     private fun LinearLayout.addCoin() {
+        val size = dp(110)
         val card = MaterialCardView(this@MainActivity).apply {
-            radius = 160f
-            strokeWidth = 6
+            radius = (size / 2).toFloat()
+            strokeWidth = dp(2)
             strokeColor = Color.parseColor("#4A5568")
-            cardElevation = 12f
-            layoutParams = LinearLayout.LayoutParams(280, 280).apply {
+            cardElevation = dp(4).toFloat()
+            layoutParams = LinearLayout.LayoutParams(size, size).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                setMargins(0, 32, 0, 48)
+                setMargins(0, dp(12), 0, dp(20))
             }
         }
         val text = TextView(this@MainActivity).apply {
             this.text = "0"
-            textSize = 56f
+            textSize = 44f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
@@ -158,24 +165,66 @@ class MainActivity : ComponentActivity() {
         card.addView(text)
         addView(card)
 
-        var side = 0
-        var flipped = false
-        ValueAnimator.ofFloat(1f, 0f, 1f).apply {
-            duration = 1000
+        var currentSide = 0
+        var isTossing = false
+
+        // Быстрое постоянное вращение (450 мс на цикл)
+        val idleAnimator = ValueAnimator.ofFloat(1f, 0f, 1f).apply {
+            duration = 450
             repeatCount = ValueAnimator.INFINITE
             interpolator = AccelerateDecelerateInterpolator()
+            var flipped = false
             addUpdateListener { anim ->
-                val scale = anim.animatedValue as Float
-                card.scaleX = scale
-                if (scale < 0.1f && !flipped) {
-                    side = if (side == 0) 1 else 0
-                    text.text = side.toString()
-                    flipped = true
-                } else if (scale > 0.5f) {
-                    flipped = false
+                if (!isTossing) {
+                    val s = anim.animatedValue as Float
+                    card.scaleX = s
+                    if (s < 0.1f && !flipped) {
+                        currentSide = if (currentSide == 0) 1 else 0
+                        text.text = currentSide.toString()
+                        flipped = true
+                    } else if (s > 0.5f) {
+                        flipped = false
+                    }
                 }
             }
-            start()
+        }
+        idleAnimator.start()
+
+        // Тап по монетке: подбрасывание с ускорением и случайным исходом
+        card.setOnClickListener {
+            if (isTossing) return@setOnClickListener
+            isTossing = true
+
+            val targetSide = Random.nextInt(2) // Финальный результат: 0 или 1
+            val tossAnimator = ValueAnimator.ofFloat(0f, 10f).apply {
+                duration = 1100
+                interpolator = DecelerateInterpolator()
+                var lastCycle = -1
+
+                addUpdateListener { anim ->
+                    val progress = anim.animatedValue as Float
+                    val currentCycle = progress.toInt()
+                    val cycleProgress = progress - currentCycle
+                    val s = kotlin.math.abs(kotlin.math.cos(cycleProgress * Math.PI)).toFloat()
+                    card.scaleX = s
+
+                    if (currentCycle != lastCycle) {
+                        currentSide = if (currentSide == 0) 1 else 0
+                        text.text = currentSide.toString()
+                        lastCycle = currentCycle
+                    }
+                }
+
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        card.scaleX = 1f
+                        currentSide = targetSide
+                        text.text = currentSide.toString()
+                        isTossing = false
+                    }
+                })
+            }
+            tossAnimator.start()
         }
     }
 
@@ -183,7 +232,7 @@ class MainActivity : ComponentActivity() {
         val v = TextView(this@MainActivity).apply {
             this.text = text
             setTextIsSelectable(true)
-            setPadding(0, 16, 0, 16)
+            setPadding(0, dp(6), 0, dp(6))
         }
         addView(v)
         return v
@@ -201,27 +250,27 @@ class MainActivity : ComponentActivity() {
                 lines > 1 -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
                 else -> InputType.TYPE_CLASS_TEXT
             }
-            setPadding(32, 32, 32, 32)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 8, 0, 16) }
+            ).apply { setMargins(0, dp(4), 0, dp(10)) }
         }
         addView(e)
         return e
     }
 
-    // Круглая пилюля с нормальным регистром текста
+    // Компактная аккуратная кнопка (высота 52dp вместо гигантских 160px)
     private fun LinearLayout.button(text: String, onClick: () -> Unit): Button {
         val b = MaterialButton(this@MainActivity).apply {
             this.text = text
             isAllCaps = false
-            cornerRadius = 72
-            textSize = 16f
+            cornerRadius = dp(26)
+            textSize = 15f
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                160
-            ).apply { setMargins(0, 8, 0, 16) }
+                dp(52)
+            ).apply { setMargins(0, dp(4), 0, dp(8)) }
             setOnClickListener { onClick() }
         }
         addView(b)
@@ -232,7 +281,7 @@ class MainActivity : ComponentActivity() {
         val c = CheckBox(this@MainActivity).apply {
             this.text = text
             isChecked = on
-            setPadding(16, 16, 16, 16)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
         }
         addView(c)
         return c
@@ -244,7 +293,7 @@ class MainActivity : ComponentActivity() {
                 this@MainActivity, android.R.layout.simple_spinner_dropdown_item, items
             )
             setSelection(selected)
-            setPadding(0, 16, 0, 16)
+            setPadding(0, dp(8), 0, dp(8))
         }
         addView(s)
         return s
