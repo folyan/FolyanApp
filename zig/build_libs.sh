@@ -2,8 +2,7 @@
 set -euo pipefail
 
 OUT="${1:-libs/arm64-v8a}"
-# freestanding собирает чистый изолированный машинный код без зависимостей от ОС
-TARGET="aarch64-freestanding"
+TARGET="aarch64-linux-android"
 OPT="${OPTIMIZE:-ReleaseSafe}"
 
 mkdir -p "$OUT"
@@ -14,12 +13,14 @@ build() {
     zig build-lib "$root" \
         -dynamic \
         -target "$TARGET" \
+        -mcpu=generic \
         -O "$OPT" \
         -fPIC \
         -fstrip \
         -femit-bin="$OUT/$name" \
         -fno-emit-h \
-        -fsingle-threaded
+        -fsingle-threaded \
+        -fno-stack-check
 }
 
 build passwordmanager.zig libfolyan_pass.so
