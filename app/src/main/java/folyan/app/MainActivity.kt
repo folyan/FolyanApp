@@ -213,7 +213,7 @@ class MainActivity : ComponentActivity() {
 
     // Круглая пилюля с нормальным регистром текста
     private fun LinearLayout.button(text: String, onClick: () -> Unit): Button {
-        val b = MaterialButton(this@MainActivity, null, com.google.android.material.R.attr.materialButtonTonalStyle).apply {
+        val b = MaterialButton(this@MainActivity).apply {
             this.text = text
             isAllCaps = false
             cornerRadius = 72
