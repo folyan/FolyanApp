@@ -15,7 +15,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Фиксируем Python 3.11 для Chaquopy
+      # Фиксируем Python 3.11 для Chaquopy (чтобы был модуль cgi)
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -40,7 +40,7 @@ jobs:
       - name: Build Release APK
         run: gradle assembleRelease --no-daemon
 
-      # Подписываем стандартными утилитами Android SDK (zipalign + apksigner)
+      # Подписываем APK
       - name: Sign APK manually
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -48,23 +48,29 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          # 1. Находим актуальную папку build-tools на раннере и добавляем в PATH
+          # 1. Находим папку build-tools
           BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
           echo "Используем Build Tools: $BUILD_TOOLS_DIR"
           export PATH="$BUILD_TOOLS_DIR:$PATH"
 
-          # 2. Восстанавливаем keystore файл из секрета
-          echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
+          # 2. Восстанавливаем keystore файл (вырезаем пробелы/переносы строк и игнорируем мусор)
+          printf "%s" "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d --ignore-garbage > release.keystore
 
           # 3. Находим скомпилированный APK
           UNSIGNED_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -z "$UNSIGNED_APK" ]; then
+            echo "Ошибка: APK не найден в app/build/outputs/apk/release"
+            exit 1
+          fi
+          echo "Найден APK: $UNSIGNED_APK"
+
           ALIGNED_APK="app/build/outputs/apk/release/app-aligned.apk"
           SIGNED_APK="app/build/outputs/apk/release/app-release-signed.apk"
 
-          # 4. Выравниваем APK через zipalign
+          # 4. Выравниваем через zipalign
           zipalign -v -p 4 "$UNSIGNED_APK" "$ALIGNED_APK"
 
-          # 5. Подписываем через apksigner (v2/v3 схемы подписи)
+          # 5. Подписываем через apksigner
           apksigner sign \
             --ks release.keystore \
             --ks-pass env:KEYSTORE_PASSWORD \
@@ -73,12 +79,12 @@ jobs:
             --out "$SIGNED_APK" \
             "$ALIGNED_APK"
 
-          # 6. Проверяем валидность подписи
+          # 6. Проверяем подпись
           apksigner verify "$SIGNED_APK"
           echo "APK успешно подписан!"
 
-          # Удаляем файл ключа для безопасности
-          rm -f release.keystore
+          # Удаляем временные файлы ключа
+          rm -f release.keystore "$ALIGNED_APK"
 
       # Выгружаем подписанный APK в артефакты
       - name: Upload Signed APK
