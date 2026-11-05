@@ -11,7 +11,7 @@
 set -euo pipefail
 
 OUT="${1:-libs/arm64-v8a}"
-TARGET="${ANDROID_TARGET:-aarch64-linux-android}"
+TARGET="${ANDROID_TARGET:-aarch64-linux-android.24}"
 OPT="${OPTIMIZE:-ReleaseSafe}"
 
 mkdir -p "$OUT"

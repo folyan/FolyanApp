@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "folyan.app"
     compileSdk = 35
-    ndkVersion = "28.2.13676358" // NDK r28c, тот же, что в ffmpeg/build_ffmpeg.sh
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "folyan.app"
@@ -18,7 +18,6 @@ android {
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 
-    // libffmpeg.so запускается как программа, поэтому библиотеки должны лежать на диске
     packaging {
         jniLibs { useLegacyPackaging = true }
     }
@@ -35,6 +34,7 @@ android {
 
 dependencies {
     implementation("androidx.activity:activity-ktx:1.9.3")
+    implementation("com.google.android.material:material:1.12.0")
 }
 
 chaquopy {
