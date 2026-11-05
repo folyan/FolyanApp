@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Builds one shared library per module for Android arm64.
-#   libfolyan_pass.so    <- passwordmanager.zig   (password generation)
-#   libfolyan_convert.so <- converter_capi.zig    (ffmpeg convert + merge)
-# Add libfolyan_stego.so / libfolyan_download.so the same way when those are ported.
+# Собирает Zig-библиотеки для Android arm64 (загрузчик больше не входит: его делает Python).
+#   libfolyan_pass.so    <- passwordmanager.zig
+#   libfolyan_convert.so <- converter_capi.zig
+#   libfolyan_stego.so   <- stego_capi.zig
 #
-# Usage: ./build_libs.sh [output_dir]
-# Requires zig on PATH. Set ANDROID_TARGET if your target differs.
+# Использование: ./build_libs.sh [output_dir]   (запускать из каталога zig/)
+# Нужен zig в PATH. ANDROID_TARGET и OPTIMIZE можно переопределить.
 
 set -euo pipefail
 
@@ -30,6 +30,5 @@ build() {
 build passwordmanager.zig libfolyan_pass.so
 build converter_capi.zig libfolyan_convert.so
 build stego_capi.zig libfolyan_stego.so
-build download_capi.zig libfolyan_download.so
 
 echo "Done: $(ls "$OUT")"
