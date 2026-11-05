@@ -124,7 +124,8 @@ class MainActivity : ComponentActivity() {
         progressView = null
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(16), dp(20), dp(20))
+            // Увеличиваем верхний отступ, чтобы кнопки были ниже
+            setPadding(dp(20), dp(32), dp(20), dp(20))
         }
         if (!menu) box.button("← Меню") { showMenu() }
 
@@ -141,9 +142,9 @@ class MainActivity : ComponentActivity() {
         return ScrollView(this).apply { addView(box) }
     }
 
-    // Монетка: неподвижна, крутится и подбрасывается ТОЛЬКО по тапу
+    // Монетка: смена цифры происходит СТРОГО в момент прохождения ребра (scaleX близко к 0)
     private fun LinearLayout.addCoin() {
-        val size = dp(96) // Немного компактнее
+        val size = dp(96)
         val card = MaterialCardView(this@MainActivity).apply {
             radius = (size / 2).toFloat()
             strokeWidth = dp(2)
@@ -151,7 +152,7 @@ class MainActivity : ComponentActivity() {
             cardElevation = dp(4).toFloat()
             layoutParams = LinearLayout.LayoutParams(size, size).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                setMargins(0, dp(8), 0, dp(16))
+                setMargins(0, dp(12), 0, dp(24))
             }
         }
         val text = TextView(this@MainActivity).apply {
@@ -176,6 +177,7 @@ class MainActivity : ComponentActivity() {
                 duration = 900
                 interpolator = DecelerateInterpolator()
                 var lastCycle = -1
+                var switchedInCurrentCycle = false
 
                 addUpdateListener { anim ->
                     val progress = anim.animatedValue as Float
@@ -185,9 +187,16 @@ class MainActivity : ComponentActivity() {
                     card.scaleX = s
 
                     if (currentCycle != lastCycle) {
-                        currentSide = if (currentSide == 0) 1 else 0
-                        text.text = currentSide.toString()
                         lastCycle = currentCycle
+                        switchedInCurrentCycle = false
+                    }
+
+                    // Меняем цифру строго в мертвой точке (когда монетка ребром s < 0.15)
+                    if (s < 0.15f && !switchedInCurrentCycle) {
+                        // На финальном цикле принудительно ставим целевую сторону
+                        currentSide = if (currentCycle >= 7) targetSide else if (currentSide == 0) 1 else 0
+                        text.text = currentSide.toString()
+                        switchedInCurrentCycle = true
                     }
                 }
 
@@ -236,7 +245,6 @@ class MainActivity : ComponentActivity() {
         return e
     }
 
-    // Кнопки поуже и покомпактнее: высота 46dp, внешние отступы меньше
     private fun LinearLayout.button(text: String, onClick: () -> Unit): Button {
         val b = MaterialButton(this@MainActivity).apply {
             this.text = text
@@ -247,7 +255,6 @@ class MainActivity : ComponentActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dp(46)
             ).apply { 
-                // Делаем кнопки по бокам чуть уже за счет горизонтальных марржинов
                 setMargins(dp(16), dp(4), dp(16), dp(8)) 
             }
             setOnClickListener { onClick() }

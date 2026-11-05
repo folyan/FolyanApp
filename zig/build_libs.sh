@@ -2,7 +2,8 @@
 set -euo pipefail
 
 OUT="${1:-libs/arm64-v8a}"
-TARGET="aarch64-linux-musl"
+# freestanding собирает чистый изолированный машинный код без зависимостей от ОС
+TARGET="aarch64-freestanding"
 OPT="${OPTIMIZE:-ReleaseSafe}"
 
 mkdir -p "$OUT"
