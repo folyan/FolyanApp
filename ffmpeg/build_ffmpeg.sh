@@ -37,6 +37,9 @@ export STRIP="$BIN/llvm-strip"
 export NM="$BIN/llvm-nm"
 export CFLAGS="-O2 -fPIC"
 export CXXFLAGS="-O2 -fPIC"
+# ffmpeg ищет opus/vorbis/x264 через pkg-config. Ищем только в нашем prefix, системные .pc не нужны.
+export PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig"
+export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
 
 mkdir -p "$PREFIX" "$SRC" "$OUT"
 
@@ -100,6 +103,16 @@ autotools_build vorbis "$SRC/libvorbis-$VORBIS_VERSION" \
   --with-ogg="$PREFIX" --disable-docs --disable-examples --disable-oggtest
 build_x264
 
+# Проверяем, что все .pc на месте, до запуска долгого configure
+command -v pkg-config >/dev/null || { echo "нет pkg-config: sudo apt-get install -y pkg-config"; exit 1; }
+for lib in opus vorbis ogg x264; do
+  pkg-config --exists "$lib" || {
+    echo "ERROR: нет $lib.pc в $PREFIX/lib/pkgconfig"
+    ls "$PREFIX/lib/pkgconfig" || true
+    exit 1
+  }
+done
+
 # ---- ffmpeg ----
 fetch "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz"
 cd "$SRC/ffmpeg-$FFMPEG_VERSION"
@@ -112,6 +125,7 @@ cd "$SRC/ffmpeg-$FFMPEG_VERSION"
   --extra-cflags="-I$PREFIX/include -fPIC" \
   --extra-ldflags="-L$PREFIX/lib" \
   --enable-static --disable-shared --enable-pic \
+  --pkg-config="$(command -v pkg-config)" --pkg-config-flags="--static" \
   --enable-gpl \
   --enable-libx264 --enable-libmp3lame --enable-libopus --enable-libvorbis \
   --disable-doc --disable-ffplay --disable-debug
