@@ -6,7 +6,7 @@ on:
 
 env:
   NDK_VERSION: r28c
-  ZIG_VERSION: 0.13.0
+  ZIG_VERSION: 0.17.0
 
 jobs:
   ffmpeg:
