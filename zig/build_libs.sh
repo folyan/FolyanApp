@@ -17,7 +17,8 @@ build() {
         -fPIC \
         -fstrip \
         -femit-bin="$OUT/$name" \
-        -fno-emit-h
+        -fno-emit-h \
+        -fsingle-threaded
 }
 
 build passwordmanager.zig libfolyan_pass.so

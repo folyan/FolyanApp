@@ -16,7 +16,6 @@ import android.os.Looper
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
-import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -125,7 +124,7 @@ class MainActivity : ComponentActivity() {
         progressView = null
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(20), dp(20), dp(20))
+            setPadding(dp(20), dp(16), dp(20), dp(20))
         }
         if (!menu) box.button("← Меню") { showMenu() }
 
@@ -142,9 +141,9 @@ class MainActivity : ComponentActivity() {
         return ScrollView(this).apply { addView(box) }
     }
 
-    // Интерактивная монетка: быстрый фоновый спин + турбо-вращение при тапе
+    // Монетка: неподвижна, крутится и подбрасывается ТОЛЬКО по тапу
     private fun LinearLayout.addCoin() {
-        val size = dp(110)
+        val size = dp(96) // Немного компактнее
         val card = MaterialCardView(this@MainActivity).apply {
             radius = (size / 2).toFloat()
             strokeWidth = dp(2)
@@ -152,12 +151,12 @@ class MainActivity : ComponentActivity() {
             cardElevation = dp(4).toFloat()
             layoutParams = LinearLayout.LayoutParams(size, size).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                setMargins(0, dp(12), 0, dp(20))
+                setMargins(0, dp(8), 0, dp(16))
             }
         }
         val text = TextView(this@MainActivity).apply {
             this.text = "0"
-            textSize = 44f
+            textSize = 38f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
@@ -168,36 +167,13 @@ class MainActivity : ComponentActivity() {
         var currentSide = 0
         var isTossing = false
 
-        // Быстрое постоянное вращение (450 мс на цикл)
-        val idleAnimator = ValueAnimator.ofFloat(1f, 0f, 1f).apply {
-            duration = 450
-            repeatCount = ValueAnimator.INFINITE
-            interpolator = AccelerateDecelerateInterpolator()
-            var flipped = false
-            addUpdateListener { anim ->
-                if (!isTossing) {
-                    val s = anim.animatedValue as Float
-                    card.scaleX = s
-                    if (s < 0.1f && !flipped) {
-                        currentSide = if (currentSide == 0) 1 else 0
-                        text.text = currentSide.toString()
-                        flipped = true
-                    } else if (s > 0.5f) {
-                        flipped = false
-                    }
-                }
-            }
-        }
-        idleAnimator.start()
-
-        // Тап по монетке: подбрасывание с ускорением и случайным исходом
         card.setOnClickListener {
             if (isTossing) return@setOnClickListener
             isTossing = true
 
-            val targetSide = Random.nextInt(2) // Финальный результат: 0 или 1
-            val tossAnimator = ValueAnimator.ofFloat(0f, 10f).apply {
-                duration = 1100
+            val targetSide = Random.nextInt(2) // 0 или 1
+            val tossAnimator = ValueAnimator.ofFloat(0f, 8f).apply {
+                duration = 900
                 interpolator = DecelerateInterpolator()
                 var lastCycle = -1
 
@@ -232,7 +208,7 @@ class MainActivity : ComponentActivity() {
         val v = TextView(this@MainActivity).apply {
             this.text = text
             setTextIsSelectable(true)
-            setPadding(0, dp(6), 0, dp(6))
+            setPadding(0, dp(4), 0, dp(4))
         }
         addView(v)
         return v
@@ -250,27 +226,30 @@ class MainActivity : ComponentActivity() {
                 lines > 1 -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
                 else -> InputType.TYPE_CLASS_TEXT
             }
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, dp(4), 0, dp(10)) }
+            ).apply { setMargins(0, dp(2), 0, dp(8)) }
         }
         addView(e)
         return e
     }
 
-    // Компактная аккуратная кнопка (высота 52dp вместо гигантских 160px)
+    // Кнопки поуже и покомпактнее: высота 46dp, внешние отступы меньше
     private fun LinearLayout.button(text: String, onClick: () -> Unit): Button {
         val b = MaterialButton(this@MainActivity).apply {
             this.text = text
             isAllCaps = false
-            cornerRadius = dp(26)
-            textSize = 15f
+            cornerRadius = dp(23)
+            textSize = 14f
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(52)
-            ).apply { setMargins(0, dp(4), 0, dp(8)) }
+                dp(46)
+            ).apply { 
+                // Делаем кнопки по бокам чуть уже за счет горизонтальных марржинов
+                setMargins(dp(16), dp(4), dp(16), dp(8)) 
+            }
             setOnClickListener { onClick() }
         }
         addView(b)
@@ -281,7 +260,7 @@ class MainActivity : ComponentActivity() {
         val c = CheckBox(this@MainActivity).apply {
             this.text = text
             isChecked = on
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setPadding(dp(6), dp(6), dp(6), dp(6))
         }
         addView(c)
         return c
@@ -293,7 +272,7 @@ class MainActivity : ComponentActivity() {
                 this@MainActivity, android.R.layout.simple_spinner_dropdown_item, items
             )
             setSelection(selected)
-            setPadding(0, dp(8), 0, dp(8))
+            setPadding(0, dp(6), 0, dp(6))
         }
         addView(s)
         return s
@@ -481,7 +460,7 @@ class MainActivity : ComponentActivity() {
                 val d = dir.text.toString().ifBlank { downloadsDir }
                 val v = convSrc
                 val a = convSrc2
-                if (v == null) {
+                if (v == `null`) {
                     out.text = "Выбери файл"
                     return@button
                 }
