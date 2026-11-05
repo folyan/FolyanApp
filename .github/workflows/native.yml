@@ -15,7 +15,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Фиксируем Python на 3.11, где модуль `cgi` еще не вырезан
+      # Фиксируем Python 3.11 для Chaquopy
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -27,7 +27,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # Ставим именно Gradle 8.9
+      # Ставим Gradle 8.9
       - name: Setup Gradle 8.9
         uses: gradle/actions/setup-gradle@v3
         with:
@@ -40,21 +40,50 @@ jobs:
       - name: Build Release APK
         run: gradle assembleRelease --no-daemon
 
-      # Подписываем собранный APK
-      - name: Sign APK
-        uses: r0adkll/sign-android-release@v1
-        id: sign_app
-        with:
-          releaseDirectory: app/build/outputs/apk/release
-          signingKey: ${{ secrets.KEYSTORE_BASE64 }}
-          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
+      # Подписываем стандартными утилитами Android SDK (zipalign + apksigner)
+      - name: Sign APK manually
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          # 1. Находим актуальную папку build-tools на раннере и добавляем в PATH
+          BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
+          echo "Используем Build Tools: $BUILD_TOOLS_DIR"
+          export PATH="$BUILD_TOOLS_DIR:$PATH"
 
-      # Выгружаем готовый APK в артефакты
+          # 2. Восстанавливаем keystore файл из секрета
+          echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
+
+          # 3. Находим скомпилированный APK
+          UNSIGNED_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          ALIGNED_APK="app/build/outputs/apk/release/app-aligned.apk"
+          SIGNED_APK="app/build/outputs/apk/release/app-release-signed.apk"
+
+          # 4. Выравниваем APK через zipalign
+          zipalign -v -p 4 "$UNSIGNED_APK" "$ALIGNED_APK"
+
+          # 5. Подписываем через apksigner (v2/v3 схемы подписи)
+          apksigner sign \
+            --ks release.keystore \
+            --ks-pass env:KEYSTORE_PASSWORD \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass env:KEY_PASSWORD \
+            --out "$SIGNED_APK" \
+            "$ALIGNED_APK"
+
+          # 6. Проверяем валидность подписи
+          apksigner verify "$SIGNED_APK"
+          echo "APK успешно подписан!"
+
+          # Удаляем файл ключа для безопасности
+          rm -f release.keystore
+
+      # Выгружаем подписанный APK в артефакты
       - name: Upload Signed APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release-signed
-          path: ${{ steps.sign_app.outputs.signedFile }}
+          path: app/build/outputs/apk/release/app-release-signed.apk
           if-no-files-found: error
