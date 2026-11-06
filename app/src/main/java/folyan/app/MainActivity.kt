@@ -41,7 +41,6 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.color.DynamicColors
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textfield.TextInputLayout
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.Executors
@@ -325,7 +324,7 @@ class MainActivity : ComponentActivity() {
 
     private fun showMenu() {
         setScreen(screen("Folyan", menu = true) {
-            addView(View(this@MainActivity).apply { minimumHeight = 96 })
+            addView(View(this@MainActivity).apply { minimumHeight = dp(96) })
             button("Интерпретатор") { showInterpreter() }
             button("Менеджер паролей") { showPasswords() }
             button("Стеганография") { showStego() }
@@ -394,10 +393,6 @@ class MainActivity : ComponentActivity() {
                 true
             } else false
         }
-        val inputLayout = TextInputLayout(this).apply {
-            boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
-            addView(input)
-        }
 
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -405,8 +400,15 @@ class MainActivity : ComponentActivity() {
         }
         row.addView(materialBtn(ICON_CLIP) { pickInterpFile() }.apply { textSize = 18f },
             LinearLayout.LayoutParams(dp(56), dp(56)))
-        row.addView(inputLayout,
-            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        input.apply {
+            // одна высота с кнопками: TextInputLayout добавлял место снизу и сдвигал поле вверх
+            minHeight = dp(56)
+            setPadding(dp(16), 0, dp(16), 0)
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundResource(android.R.drawable.edit_text)
+        }
+        row.addView(input,
+            LinearLayout.LayoutParams(0, dp(56), 1f).apply { setMargins(dp(6), 0, dp(6), 0) })
         row.addView(materialBtn(ICON_SEND) { sendInterp(input) }.apply {
             textSize = 18f
             // зажатие ▶ останавливает выполнение кода
@@ -583,9 +585,9 @@ class MainActivity : ComponentActivity() {
             val secret = field("Что спрятать", lines = 2)
             val out = TextView(this@MainActivity).apply {
                 setTextIsSelectable(true)
-                setPadding(0, 16, 0, 16)
+                setPadding(0, dp(16), 0, dp(16))
             }
-            addView(View(this@MainActivity).apply { minimumHeight = 96 })
+            addView(View(this@MainActivity).apply { minimumHeight = dp(96) })
             button("Спрятать") {
                 val c = cover.text.toString()
                 val s = secret.text.toString()
