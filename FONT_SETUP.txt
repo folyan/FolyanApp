@@ -1,0 +1,4 @@
+Шрифт для приложения (иконки Nerd Font):
+положи JetBrainsMonoNerdFontMono-Regular.ttf в app/src/main/res/font/
+и переименуй в jetbrains_nerd_mono.ttf (строчными буквами, без дефисов).
+Папка res/font должна содержать ТОЛЬКО .ttf/.otf/.ttc/.xml файлы.
