@@ -144,7 +144,7 @@ class MainActivity : ComponentActivity() {
 
     // Монетка: смена цифры происходит СТРОГО в момент прохождения ребра (scaleX близко к 0)
     private fun LinearLayout.addCoin() {
-        val size = dp(96)
+        val size = dp(150)
         val card = MaterialCardView(this@MainActivity).apply {
             radius = (size / 2).toFloat()
             strokeWidth = dp(2)
@@ -152,12 +152,12 @@ class MainActivity : ComponentActivity() {
             cardElevation = dp(4).toFloat()
             layoutParams = LinearLayout.LayoutParams(size, size).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                setMargins(0, dp(12), 0, dp(24))
+                setMargins(0, dp(24), 0, dp(40))
             }
         }
         val text = TextView(this@MainActivity).apply {
             this.text = "0"
-            textSize = 38f
+            textSize = 60f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
@@ -299,6 +299,7 @@ class MainActivity : ComponentActivity() {
 
     private fun showMenu() {
         setScreen(screen("Folyan", menu = true) {
+            addView(View(this@MainActivity).apply { minimumHeight = 96 })
             button("Интерпретатор") { showInterpreter() }
             button("Менеджер паролей") { showPasswords() }
             button("Стеганография") { showStego() }
@@ -366,7 +367,11 @@ class MainActivity : ComponentActivity() {
         setScreen(screen("Стеганография") {
             val cover = field("Маскировка (обычный текст)", lines = 3)
             val secret = field("Что спрятать", lines = 2)
-            val out = label("")
+            val out = TextView(this@MainActivity).apply {
+                setTextIsSelectable(true)
+                setPadding(0, 16, 0, 16)
+            }
+            addView(View(this@MainActivity).apply { minimumHeight = 96 })
             button("Спрятать") {
                 val c = cover.text.toString()
                 val s = secret.text.toString()
@@ -384,6 +389,7 @@ class MainActivity : ComponentActivity() {
                 val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 cm.setPrimaryClip(ClipData.newPlainText("folyan", out.text))
             }
+            addView(out)
         })
     }
 

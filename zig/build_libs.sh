@@ -20,8 +20,7 @@ build() {
         -femit-bin="$OUT/$name" \
         -fno-emit-h \
         -fsingle-threaded \
-        -fno-stack-check \
-        -lc
+        -fno-stack-check
 }
 
 build passwordmanager.zig libfolyan_pass.so

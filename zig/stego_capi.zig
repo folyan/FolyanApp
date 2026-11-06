@@ -118,3 +118,9 @@ test "max_secret matches what fits" {
     try std.testing.expectEqual(@as(usize, 3), folyan_stego_max_secret(10, 10 + 3 * 24));
     try std.testing.expectEqual(@as(usize, 0), folyan_stego_max_secret(100, 50));
 }
+
+// Заглушка для старых версий Android Bionic libc (как в passwordmanager.zig)
+export fn getauxval(id: c_ulong) c_ulong {
+    _ = id;
+    return 0;
+}
