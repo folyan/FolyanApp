@@ -108,3 +108,9 @@ test "rejects zero iterations" {
     var out: [password_len]u8 = undefined;
     try std.testing.expectError(error.WeakParameters, generatePassword(std.testing.allocator, &out, "a", "b", "c", 0));
 }
+
+// Заглушка для старых версий Android Bionic libc
+export fn getauxval(id: c_ulong) c_ulong {
+    _ = id;
+    return 0;
+}
