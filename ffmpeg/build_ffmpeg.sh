@@ -117,18 +117,35 @@ done
 fetch "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz"
 cd "$SRC/ffmpeg-$FFMPEG_VERSION"
 
+# Минимальная сборка: только то, что использует dl.py (download/convert/merge).
+# Всё остальное выключено: меньше кода в .so.
+#   вход: mov/mp4/m4a, matroska/webm, ogg/opus, mp3, wav, flac, aac (локальные файлы)
+#   выход: mp4, mkv, ogg (opus/vorbis), mp3, wav, flac, aac (adts), m4a (ipod)
+#   кодеки: h264/hevc/vp9 и aac/mp3/opus/vorbis/flac/pcm на вход; x264, lame, opus, vorbis, aac, flac, pcm на выход
+#   сеть не нужна: yt-dlp качает сам, ffmpeg работает только с локальными файлами
 ./configure \
   --prefix="$PREFIX" \
   --target-os=android --arch=aarch64 --enable-cross-compile \
   --cc="$CC" --cxx="$CXX" --ar="$AR" --ranlib="$RANLIB" --strip="$STRIP" --nm="$NM" \
   --sysroot="$TC/sysroot" \
-  --extra-cflags="-I$PREFIX/include -fPIC" \
+  --extra-cflags="-I$PREFIX/include -fPIC -Os" \
   --extra-ldflags="-L$PREFIX/lib" \
   --enable-static --disable-shared --enable-pic \
   --pkg-config="$(command -v pkg-config)" --pkg-config-flags="--static" \
   --enable-gpl \
+  --disable-everything \
+  --disable-network --disable-doc --disable-debug --disable-avdevice \
+  --disable-ffplay --disable-ffprobe --enable-small \
   --enable-libx264 --enable-libmp3lame --enable-libopus --enable-libvorbis \
-  --disable-doc --disable-ffplay --disable-debug
+  --enable-protocol=file,pipe \
+  --enable-demuxer=mov,matroska,ogg,mp3,wav,flac,aac,concat \
+  --enable-muxer=mp4,ipod,matroska,ogg,mp3,wav,flac,adts \
+  --enable-decoder=h264,hevc,vp9,aac,mp3,opus,vorbis,flac,pcm_s16le \
+  --enable-encoder=libx264,libmp3lame,libopus,libvorbis,aac,flac,pcm_s16le \
+  --enable-parser=h264,hevc,vp9,aac,mpegaudio,opus,vorbis,flac \
+  --enable-bsf=aac_adtstoasc,h264_mp4toannexb,hevc_mp4toannexb,extract_extradata \
+  --enable-filter=aresample,aformat,anull,format,null \
+  --enable-swresample
 
 make -j"$JOBS"
 

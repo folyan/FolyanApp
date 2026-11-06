@@ -35,6 +35,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.res.ResourcesCompat
 import com.chaquo.python.Python
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
@@ -53,7 +54,16 @@ private val DOWNLOAD_FORMATS = listOf("mkv", "mp4", "wav", "mp3", "m4a", "opus")
 private val CONVERT_FORMATS = listOf("mp4", "mkv", "mp3", "wav", "m4a", "opus", "ogg", "flac", "aac")
 private val MERGE_FORMATS = listOf("mp4", "mkv")
 
+// Иконки из JetBrains Mono Nerd Font (Mono)
+private const val ICON_BACK = "\uF060"   // стрелка влево
+private const val ICON_CLIP = "\uF0C6"   // скрепка
+private const val ICON_SEND = "\uF04B"   // play / отправка
+
 class MainActivity : ComponentActivity() {
+
+    private val appFont by lazy {
+        ResourcesCompat.getFont(this, R.font.jetbrains_nerd_mono)
+    }
 
     private val py by lazy { Python.getInstance() }
     private val worker = Executors.newSingleThreadExecutor()
@@ -121,9 +131,15 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    private fun applyFont(v: View) {
+        if (v is TextView) v.typeface = appFont
+        if (v is ViewGroup) for (i in 0 until v.childCount) applyFont(v.getChildAt(i))
+    }
+
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     private fun setScreen(view: View) {
+        applyFont(view)
         content.removeAllViews()
         content.addView(view)
         atMenu = false
@@ -137,14 +153,14 @@ class MainActivity : ComponentActivity() {
             // Увеличиваем верхний отступ, чтобы кнопки были ниже
             setPadding(dp(20), dp(32), dp(20), dp(20))
         }
-        if (!menu) box.button("← Меню") { showMenu() }
+        if (!menu) box.addView(arrowBack { showMenu() })
 
         if (menu) {
             box.addCoin()
         } else {
             box.label(title).apply {
                 textSize = 20f
-                typeface = Typeface.DEFAULT_BOLD
+                typeface = appFont
             }
         }
 
@@ -168,7 +184,7 @@ class MainActivity : ComponentActivity() {
         val text = TextView(this@MainActivity).apply {
             this.text = "0"
             textSize = 60f
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = appFont
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
@@ -329,6 +345,14 @@ class MainActivity : ComponentActivity() {
     private var interpCode: String? = null
     private var interpName = ""
 
+    private fun arrowBack(onClick: () -> Unit): MaterialButton = MaterialButton(this).apply {
+        text = ICON_BACK
+        textSize = 20f
+        cornerRadius = dp(23)
+        setOnClickListener { onClick() }
+        layoutParams = LinearLayout.LayoutParams(dp(56), dp(46))
+    }
+
     private fun materialBtn(label: String, onClick: () -> Unit) = MaterialButton(this).apply {
         text = label
         isAllCaps = false
@@ -341,15 +365,7 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(12), dp(12), dp(12))
         }
-        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        top.addView(materialBtn("← Меню") { showMenu() },
-            LinearLayout.LayoutParams(0, dp(46), 1f))
-        top.addView(materialBtn("Копировать") { copyChat() }.apply { textSize = 13f },
-            LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginStart = dp(6) })
-        top.addView(materialBtn("■ Стоп") { py.getModule("features").callAttr("interp_stop") }
-            .apply { textSize = 13f },
-            LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginStart = dp(6) })
-        root.addView(top)
+        root.addView(arrowBack { showMenu() })
 
         // история чата сохраняется при выходе и возврате на экран
         val chat = interpChat ?: LinearLayout(this).apply {
@@ -387,11 +403,18 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        row.addView(materialBtn("📎") { pickInterpFile() },
+        row.addView(materialBtn(ICON_CLIP) { pickInterpFile() }.apply { textSize = 18f },
             LinearLayout.LayoutParams(dp(56), dp(56)))
         row.addView(inputLayout,
             LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(materialBtn("▶") { sendInterp(input) },
+        row.addView(materialBtn(ICON_SEND) { sendInterp(input) }.apply {
+            textSize = 18f
+            // зажатие ▶ останавливает выполнение кода
+            setOnLongClickListener {
+                py.getModule("features").callAttr("interp_stop")
+                true
+            }
+        },
             LinearLayout.LayoutParams(dp(56), dp(56)))
         root.addView(row)
 
@@ -404,6 +427,7 @@ class MainActivity : ComponentActivity() {
         val chat = interpChat ?: return
         val tv = TextView(this).apply {
             this.text = text
+            typeface = appFont
             setPadding(dp(12), dp(8), dp(12), dp(8))
             setOnLongClickListener {
                 copyToClipboard(text)
@@ -435,19 +459,6 @@ class MainActivity : ComponentActivity() {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("folyan", text))
         Toast.makeText(this, "Скопировано", Toast.LENGTH_SHORT).show()
-    }
-
-    // Копирует всю историю чата (пузыри по порядку)
-    private fun copyChat() {
-        val chat = interpChat ?: return
-        val lines = (0 until chat.childCount).mapNotNull { idx ->
-            (chat.getChildAt(idx) as? TextView)?.text?.toString()
-        }
-        if (lines.isEmpty()) {
-            Toast.makeText(this, "Чат пуст", Toast.LENGTH_SHORT).show()
-            return
-        }
-        copyToClipboard(lines.joinToString("\n"))
     }
 
     // Возвращаем фокус и клавиатуру в поле, чтобы можно было писать сразу
