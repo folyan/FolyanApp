@@ -60,6 +60,13 @@ private const val ICON_SEND = "\uF04B"   // play / отправка
 
 class MainActivity : ComponentActivity() {
 
+    // Шрифт интерфейса: системный, без файла.
+    // Свой шрифт: положи .ttf в res/font/ и замени на ResourcesCompat.getFont(this, R.font.имя)
+        private val uiFont: Typeface by lazy {
+            ResourcesCompat.getFont(this, R.font.ui_font) ?: Typeface.DEFAULT
+        }
+
+    // JetBrains Mono Nerd Font: только для интерпретатора
     private val appFont by lazy {
         ResourcesCompat.getFont(this, R.font.jetbrains_nerd_mono)
     }
@@ -130,8 +137,13 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    private fun applyFontTo(v: View, font: Typeface) {
+        if (v is TextView) v.typeface = font
+        if (v is ViewGroup) for (i in 0 until v.childCount) applyFontTo(v.getChildAt(i), font)
+    }
+
     private fun applyFont(v: View) {
-        if (v is TextView) v.typeface = appFont
+        if (v is TextView) v.typeface = uiFont
         if (v is ViewGroup) for (i in 0 until v.childCount) applyFont(v.getChildAt(i))
     }
 
@@ -159,7 +171,7 @@ class MainActivity : ComponentActivity() {
         } else {
             box.label(title).apply {
                 textSize = 20f
-                typeface = appFont
+                typeface = uiFont
             }
         }
 
@@ -177,13 +189,13 @@ class MainActivity : ComponentActivity() {
             cardElevation = dp(4).toFloat()
             layoutParams = LinearLayout.LayoutParams(size, size).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                setMargins(0, dp(24), 0, dp(40))
+                setMargins(0, dp(64), 0, dp(40))
             }
         }
         val text = TextView(this@MainActivity).apply {
             this.text = "0"
             textSize = 60f
-            typeface = appFont
+            typeface = uiFont
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
@@ -344,13 +356,29 @@ class MainActivity : ComponentActivity() {
     private var interpCode: String? = null
     private var interpName = ""
 
-    private fun arrowBack(onClick: () -> Unit): MaterialButton = MaterialButton(this).apply {
-        text = ICON_BACK
-        textSize = 20f
-        cornerRadius = dp(23)
-        setOnClickListener { onClick() }
-        layoutParams = LinearLayout.LayoutParams(dp(56), dp(46))
-    }
+    // Кнопка-иконка: без внутренних отступов Material, чтобы глиф не обрезался
+    private fun iconButton(glyph: String, size: Int, onClick: () -> Unit): MaterialButton =
+        MaterialButton(this).apply {
+            text = glyph
+            textSize = 20f
+            cornerRadius = dp(size / 2)
+            insetTop = 0
+            insetBottom = 0
+            minHeight = 0
+            minimumHeight = 0
+            minWidth = 0
+            minimumWidth = 0
+            setPadding(0, 0, 0, 0)
+            includeFontPadding = false
+            gravity = Gravity.CENTER
+            setOnClickListener { onClick() }
+            layoutParams = LinearLayout.LayoutParams(dp(size), dp(size))
+        }
+
+    private fun arrowBack(onClick: () -> Unit): MaterialButton =
+        iconButton(ICON_BACK, 46, onClick).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(56), dp(46))
+        }
 
     private fun materialBtn(label: String, onClick: () -> Unit) = MaterialButton(this).apply {
         text = label
@@ -398,19 +426,24 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        row.addView(materialBtn(ICON_CLIP) { pickInterpFile() }.apply { textSize = 18f },
+        row.addView(iconButton(ICON_CLIP, 56) { pickInterpFile() },
             LinearLayout.LayoutParams(dp(56), dp(56)))
         input.apply {
             // одна высота с кнопками: TextInputLayout добавлял место снизу и сдвигал поле вверх
             minHeight = dp(56)
             setPadding(dp(16), 0, dp(16), 0)
             gravity = Gravity.CENTER_VERTICAL
-            setBackgroundResource(android.R.drawable.edit_text)
+            setTextColor(Color.parseColor("#E6E1E5"))
+            setHintTextColor(Color.parseColor("#8A8F98"))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(28).toFloat()
+                setColor(Color.parseColor("#2A2A33"))
+                setStroke(dp(2), Color.parseColor("#4A5568"))
+            }
         }
         row.addView(input,
             LinearLayout.LayoutParams(0, dp(56), 1f).apply { setMargins(dp(6), 0, dp(6), 0) })
-        row.addView(materialBtn(ICON_SEND) { sendInterp(input) }.apply {
-            textSize = 18f
+        row.addView(iconButton(ICON_SEND, 56) { sendInterp(input) }.apply {
             // зажатие ▶ останавливает выполнение кода
             setOnLongClickListener {
                 py.getModule("features").callAttr("interp_stop")
@@ -421,6 +454,7 @@ class MainActivity : ComponentActivity() {
         root.addView(row)
 
         setScreen(root)
+        applyFontTo(root, appFont)
         interpActive = true
         refreshInterpFile()
     }
