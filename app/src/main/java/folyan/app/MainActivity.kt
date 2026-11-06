@@ -62,13 +62,13 @@ class MainActivity : ComponentActivity() {
 
     // Шрифт интерфейса: системный, без файла.
     // Свой шрифт: положи .ttf в res/font/ и замени на ResourcesCompat.getFont(this, R.font.имя)
-        private val uiFont: Typeface by lazy {
-            ResourcesCompat.getFont(this, R.font.ui_font) ?: Typeface.DEFAULT
-        }
+    private val uiFont: Typeface by lazy {
+        ResourcesCompat.getFont(this, R.font.ui_font) ?: Typeface.DEFAULT
+    }
 
     // JetBrains Mono Nerd Font: только для интерпретатора
-    private val appFont by lazy {
-        ResourcesCompat.getFont(this, R.font.jetbrains_nerd_mono)
+    private val appFont: Typeface by lazy {
+        ResourcesCompat.getFont(this, R.font.jetbrains_nerd_mono) ?: Typeface.DEFAULT
     }
 
     private val py by lazy { Python.getInstance() }
