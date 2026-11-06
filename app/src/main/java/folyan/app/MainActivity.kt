@@ -7,8 +7,10 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.graphics.Typeface
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
@@ -16,6 +18,7 @@ import android.os.Looper
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -76,7 +79,8 @@ class MainActivity : ComponentActivity() {
                 } catch (e: Exception) {
                 }
             }
-            main.postDelayed(this, 500)
+            if (interpActive) drainInterp()
+            main.postDelayed(this, 300)
         }
     }
 
@@ -118,6 +122,7 @@ class MainActivity : ComponentActivity() {
         content.removeAllViews()
         content.addView(view)
         atMenu = false
+        interpActive = false
     }
 
     private fun screen(title: String, menu: Boolean = false, build: LinearLayout.() -> Unit): View {
@@ -302,7 +307,7 @@ class MainActivity : ComponentActivity() {
             addView(View(this@MainActivity).apply { minimumHeight = 96 })
             button("Интерпретатор") { showInterpreter() }
             button("Менеджер паролей") { showPasswords() }
-            button("Стеганография") { showStego() }
+            button("Стенография") { showStego() }
             button("Качалка") { showDownloader() }
             button("Конвертер") { showConverter() }
             button("Выход") { finish() }
@@ -310,17 +315,161 @@ class MainActivity : ComponentActivity() {
         atMenu = true
     }
 
+    // ---------- интерпретатор (чат, как в core.py) ----------
+
+    private var interpActive = false
+    private var interpChat: LinearLayout? = null
+    private var interpScroll: ScrollView? = null
+    private var interpFileLabel: TextView? = null
+    private var interpCode: String? = null
+    private var interpName = ""
+
     private fun showInterpreter() {
-        setScreen(screen("Интерпретатор") {
-            val code = field("Python-код", lines = 8)
-            val out = label("")
-            button("Запустить") {
-                val src = code.text.toString()
-                busy(out, "Выполняю") {
-                    py.getModule("features").callAttr("interp_run", src).toString()
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+        }
+        root.addView(Button(this).apply {
+            text = "← Меню"
+            setOnClickListener { showMenu() }
+        })
+
+        // история чата сохраняется при выходе и возврате на экран
+        val chat = interpChat ?: LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }.also { interpChat = it }
+        (chat.parent as? ViewGroup)?.removeView(chat)
+        val scroll = ScrollView(this).apply { addView(chat) }
+        interpScroll = scroll
+        root.addView(scroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+        ))
+
+        val fileLabel = TextView(this).apply {
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setOnClickListener { clearInterpFile() }
+        }
+        interpFileLabel = fileLabel
+        root.addView(fileLabel)
+        root.addView(Button(this).apply {
+            text = "Открыть .py"
+            setOnClickListener { pickInterpFile() }
+        })
+
+        val input = EditText(this).apply { hint = "Код или ответ на input()" }
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row.addView(input, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(Button(this).apply {
+            text = "▶"
+            setOnClickListener { sendInterp(input) }
+        })
+        root.addView(row)
+
+        setScreen(root)
+        interpActive = true
+        refreshInterpFile()
+        if (chat.childCount == 0) bubble("Напиши код или выбери файл.", right = false)
+    }
+
+    private fun bubble(text: String, right: Boolean) {
+        val chat = interpChat ?: return
+        val tv = TextView(this).apply {
+            this.text = text
+            setTextIsSelectable(true)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(if (right) Color.parseColor("#3B2F5C") else Color.parseColor("#2A2A33"))
+            }
+        }
+        chat.addView(tv, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            gravity = if (right) Gravity.END else Gravity.START
+            setMargins(0, dp(4), 0, dp(4))
+        })
+        interpScroll?.post { interpScroll?.fullScroll(View.FOCUS_DOWN) }
+    }
+
+    // Забираем вывод и запросы input() из Python
+    private fun drainInterp() {
+        val msgs = py.getModule("features").callAttr("interp_drain").asList()
+        for (m in msgs) {
+            val pair = m.asList()
+            bubble(pair[0].toString(), right = false)
+        }
+    }
+
+    private fun sendInterp(input: EditText) {
+        val text = input.text.toString().trim()
+        val features = py.getModule("features")
+        val code = interpCode
+
+        if (features.callAttr("interp_is_running").toBoolean()) {
+            if (text.isNotEmpty()) {
+                bubble(text, right = true)
+                features.callAttr("interp_answer", text)
+                input.setText("")
+            }
+            return
+        }
+        when {
+            code != null -> {
+                interpChat?.removeAllViews()
+                bubble(interpName, right = true)
+                if (text.isNotEmpty()) bubble(text, right = true)
+                input.setText("")
+                features.callAttr("interp_start", code, true, text.ifEmpty { null })
+            }
+            text.isNotEmpty() -> {
+                bubble(text, right = true)
+                input.setText("")
+                features.callAttr("interp_start", text, false, null)
+            }
+            else -> bubble("Напиши код или выбери файл.", right = false)
+        }
+    }
+
+    private fun pickInterpFile() {
+        pickHandler = { uri ->
+            worker.execute {
+                val name = displayName(uri)
+                val text = try {
+                    contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
+                } catch (e: Exception) {
+                    null
+                }
+                main.post {
+                    if (text != null) {
+                        interpName = name
+                        interpCode = text
+                        refreshInterpFile()
+                    } else {
+                        bubble("Не удалось открыть файл", right = false)
+                    }
                 }
             }
-        })
+        }
+        picker.launch(arrayOf("*/*"))
+    }
+
+    private fun displayName(uri: Uri): String =
+        contentResolver.query(uri, null, null, null, null)?.use { c ->
+            val i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (c.moveToFirst() && i >= 0) c.getString(i) else null
+        } ?: "файл.py"
+
+    private fun clearInterpFile() {
+        interpCode = null
+        interpName = ""
+        py.getModule("features").callAttr("interp_reset")
+        refreshInterpFile()
+    }
+
+    private fun refreshInterpFile() {
+        val label = interpFileLabel ?: return
+        label.visibility = if (interpCode != null) View.VISIBLE else View.GONE
+        label.text = "$interpName  (нажми, чтобы убрать)"
     }
 
     private fun loadState(name: String): JSONObject = try {
@@ -364,7 +513,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showStego() {
-        setScreen(screen("Стеганография") {
+        setScreen(screen("Стенография") {
             val cover = field("Маскировка (обычный текст)", lines = 3)
             val secret = field("Что спрятать", lines = 2)
             val out = TextView(this@MainActivity).apply {
