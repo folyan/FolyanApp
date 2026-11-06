@@ -5,11 +5,10 @@ Kotlin вызывает init(nativeLibraryDir) один раз при старт
 """
 import ctypes
 import os
-from ctypes import (c_bool, c_char_p, c_int, c_size_t, c_uint8, c_uint32,
-                    c_void_p, c_ssize_t, byref, create_string_buffer)
+from ctypes import (c_char_p, c_int, c_size_t, c_uint32,
+                    c_void_p, c_ssize_t, create_string_buffer)
 
 PASSWORD_LEN = 32  # passwordmanager.zig: password_len = 30 + 2
-PATH_CAP = 4096
 
 _dir = None
 _libs = {}
@@ -82,49 +81,3 @@ def stego_reveal(data: bytes, cap=None) -> bytes:
     if n < 0:
         raise ValueError(f"не удалось извлечь (код {n})")
     return out.raw[:n]
-
-
-# ---------------- конвертер Zig: libfolyan_convert.so ----------------
-# Альтернатива ffmpeg-обвязке из dl.py. Вызов: convert(exe, src, out_dir, fmt, progress, cancelled)
-
-class _Callbacks(ctypes.Structure):
-    _fields_ = [
-        ("ctx", c_void_p),
-        ("on_progress", c_void_p),
-        ("is_cancelled", c_void_p),
-        ("remove_file", c_void_p),
-        ("exists", c_void_p),
-    ]
-
-
-def convert(exe, src, out_dir, fmt, on_progress=None, is_cancelled=None):
-    lib = _lib("folyan_convert")
-    lib.folyan_init()
-
-    progress_t = ctypes.CFUNCTYPE(None, c_void_p, c_uint8)
-    cancel_t = ctypes.CFUNCTYPE(c_bool, c_void_p)
-    remove_t = ctypes.CFUNCTYPE(None, c_void_p, c_char_p)
-    exists_t = ctypes.CFUNCTYPE(c_bool, c_void_p, c_char_p)
-
-    # ссылки держим в переменных, иначе сборщик мусора уберёт колбэки
-    cb_progress = progress_t(lambda _c, p: on_progress and on_progress(p))
-    cb_cancel = cancel_t(lambda _c: bool(is_cancelled and is_cancelled()))
-    cb_remove = remove_t(lambda _c, p: os.path.exists(p.decode()) and os.remove(p.decode()))
-    cb_exists = exists_t(lambda _c, p: os.path.exists(p.decode()))
-
-    cbs = _Callbacks(None, ctypes.cast(cb_progress, c_void_p),
-                     ctypes.cast(cb_cancel, c_void_p),
-                     ctypes.cast(cb_remove, c_void_p),
-                     ctypes.cast(cb_exists, c_void_p))
-
-    fn = lib.folyan_convert
-    fn.argtypes = [c_char_p, c_char_p, c_char_p, c_char_p,
-                   c_void_p, c_void_p, c_size_t]
-    fn.restype = c_int
-
-    out = create_string_buffer(PATH_CAP)
-    rc = fn(exe.encode(), src.encode(), out_dir.encode(), fmt.encode(),
-            byref(cbs), out, PATH_CAP)
-    if rc != 0:
-        raise RuntimeError(f"zig convert: код {rc}")
-    return out.value.decode("utf-8")

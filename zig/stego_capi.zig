@@ -1,6 +1,6 @@
 const std = @import("std");
 
-// Zero-width steganography, same format as main.zig:
+// Zero-width steganography, same format as the original Python stego (burmaldainator):
 //   each secret byte -> 8 bits, MSB first
 //   bit 0 -> U+200B (E2 80 8B), bit 1 -> U+200C (E2 80 8C)
 //   the hidden bits are appended after the cover text.

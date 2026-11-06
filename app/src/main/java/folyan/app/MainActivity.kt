@@ -674,11 +674,12 @@ class MainActivity : ComponentActivity() {
         })
     }
 
-    private fun pickFile(onPicked: (String) -> Unit) {
+    // slot: "src" или "audio". Файл перезаписывается, а не копится новый на каждый выбор.
+    private fun pickFile(slot: String, onPicked: (String) -> Unit) {
         pickHandler = { uri ->
             worker.execute {
                 val path = try {
-                    copyToCache(uri)
+                    copyToCache(uri, slot)
                 } catch (e: Exception) {
                     null
                 }
@@ -688,8 +689,8 @@ class MainActivity : ComponentActivity() {
         picker.launch(arrayOf("*/*"))
     }
 
-    private fun copyToCache(uri: Uri): String {
-        val f = File(cacheDir, "pick_${System.currentTimeMillis()}")
+    private fun copyToCache(uri: Uri, slot: String): String {
+        val f = File(cacheDir, "pick_$slot")
         contentResolver.openInputStream(uri)!!.use { input ->
             f.outputStream().use { input.copyTo(it) }
         }
@@ -703,14 +704,14 @@ class MainActivity : ComponentActivity() {
             val dir = field("Папка", downloadsDir)
             val pick1 = label("Файл: не выбран")
             button("Выбрать файл") {
-                pickFile { p ->
+                pickFile("src") { p ->
                     convSrc = p
                     pick1.text = "Файл выбран"
                 }
             }
             val pick2 = label("Аудио: не выбран")
             button("Выбрать аудио") {
-                pickFile { p ->
+                pickFile("audio") { p ->
                     convSrc2 = p
                     pick2.text = "Аудио выбрано"
                 }
