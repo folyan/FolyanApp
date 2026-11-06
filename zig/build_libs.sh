@@ -20,11 +20,11 @@ build() {
         -femit-bin="$OUT/$name" \
         -fno-emit-h \
         -fsingle-threaded \
-        -fno-stack-check
+        -fno-stack-check \
+        -lc
 }
 
 build passwordmanager.zig libfolyan_pass.so
 build stego_capi.zig libfolyan_stego.so
-build converter_capi.zig libfolyan_convert.so
 
 echo "Done: $(ls "$OUT")"
