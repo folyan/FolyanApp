@@ -57,6 +57,7 @@ private val MERGE_FORMATS = listOf("mp4", "mkv")
 private const val ICON_BACK = "\uF060"   // стрелка влево
 private const val ICON_CLIP = "\uF0C6"   // скрепка
 private const val ICON_SEND = "\uF04B"   // play / отправка
+private const val ICON_TAG = "icon"
 
 class MainActivity : ComponentActivity() {
 
@@ -143,7 +144,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun applyFont(v: View) {
-        if (v is TextView) v.typeface = uiFont
+        // иконки всегда рисуются шрифтом с глифами Nerd Font, остальной текст — uiFont
+        if (v is TextView && v.tag != ICON_TAG) v.typeface = uiFont
         if (v is ViewGroup) for (i in 0 until v.childCount) applyFont(v.getChildAt(i))
     }
 
@@ -360,6 +362,8 @@ class MainActivity : ComponentActivity() {
     private fun iconButton(glyph: String, size: Int, onClick: () -> Unit): MaterialButton =
         MaterialButton(this).apply {
             text = glyph
+            tag = ICON_TAG
+            typeface = appFont
             textSize = 20f
             cornerRadius = dp(size / 2)
             insetTop = 0
