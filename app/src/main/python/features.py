@@ -26,7 +26,7 @@ def password(master, salt, site, iterations):
     return native.generate_password(master, salt, site, int(iterations))
 
 
-# ---------- Стенография ----------
+# ---------- Стеганография ----------
 
 def stego_hide(cover, secret):
     cover, secret = _one_line(cover), _one_line(secret)
@@ -55,10 +55,17 @@ def stego_reveal(text):
 
 # ---------- Интерпретатор (интерактивный, как InterpreterScreen в core.py) ----------
 # Код выполняется в фоновом потоке. input() ждёт ответ из очереди replies.
-# Kotlin опрашивает drain() и рисует пузыри.
+# Kotlin опрашивает drain() и рисует пузыри. stop() прерывает выполнение.
 
+import ctypes
 import queue
 import threading
+
+_STOP = object()
+
+
+class _StopRun(Exception):
+    """Поднимается внутри потока интерпретатора при нажатии «Стоп»."""
 
 
 class _Pipe:
@@ -86,6 +93,7 @@ class _Interpreter:
         self.env = None
         self.running = False
         self.pending = None
+        self.thread_id = None
         self.replies = queue.Queue()
         self.messages = queue.Queue()
 
@@ -99,6 +107,8 @@ class _Interpreter:
             self.env = {"__builtins__": builtins, "input": self._input}
         self.pending = first
         self.running = True
+        while not self.replies.empty():
+            self.replies.get_nowait()
         threading.Thread(target=self._run, args=(code,), daemon=True).start()
         return True
 
@@ -108,21 +118,41 @@ class _Interpreter:
         if self.pending is not None:
             answer, self.pending = self.pending, None
             return answer
-        return self.replies.get()
+        reply = self.replies.get()
+        if reply is _STOP:
+            raise _StopRun()
+        return reply
 
     def answer(self, text):
         if self.running:
             self.replies.put(text)
 
+    def stop(self):
+        if not self.running:
+            return
+        # разблокировать input(), если он ждёт ответа
+        self.replies.put(_STOP)
+        # прервать выполнение кода в потоке (работает для циклов Python)
+        if self.thread_id is not None:
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                ctypes.c_ulong(self.thread_id), ctypes.py_object(_StopRun)
+            )
+
     def _run(self, code):
+        self.thread_id = threading.get_ident()
         pipe = _Pipe(self._say)
         try:
             with contextlib.redirect_stdout(pipe):
                 exec(code, self.env)
+        except _StopRun:
+            pipe.flush()
+            self._say("Остановлено")
         except (Exception, SystemExit) as e:
+            pipe.flush()
             self._say(f"Ошибка: {e}")
         finally:
             pipe.flush()
+            self.thread_id = None
             self.running = False
 
     def drain(self):
@@ -147,6 +177,10 @@ def interp_start(code, fresh, first=None):
 
 def interp_answer(text):
     _interp.answer(text)
+
+
+def interp_stop():
+    _interp.stop()
 
 
 def interp_drain():

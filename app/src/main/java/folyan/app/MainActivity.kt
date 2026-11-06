@@ -20,6 +20,8 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
@@ -29,6 +31,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,6 +39,8 @@ import com.chaquo.python.Python
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.color.DynamicColors
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.Executors
@@ -307,7 +312,7 @@ class MainActivity : ComponentActivity() {
             addView(View(this@MainActivity).apply { minimumHeight = 96 })
             button("Интерпретатор") { showInterpreter() }
             button("Менеджер паролей") { showPasswords() }
-            button("Стенография") { showStego() }
+            button("Стеганография") { showStego() }
             button("Качалка") { showDownloader() }
             button("Конвертер") { showConverter() }
             button("Выход") { finish() }
@@ -324,15 +329,27 @@ class MainActivity : ComponentActivity() {
     private var interpCode: String? = null
     private var interpName = ""
 
+    private fun materialBtn(label: String, onClick: () -> Unit) = MaterialButton(this).apply {
+        text = label
+        isAllCaps = false
+        cornerRadius = dp(23)
+        setOnClickListener { onClick() }
+    }
+
     private fun showInterpreter() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(12), dp(12), dp(12))
         }
-        root.addView(Button(this).apply {
-            text = "← Меню"
-            setOnClickListener { showMenu() }
-        })
+        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        top.addView(materialBtn("← Меню") { showMenu() },
+            LinearLayout.LayoutParams(0, dp(46), 1f))
+        top.addView(materialBtn("Копировать") { copyChat() }.apply { textSize = 13f },
+            LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginStart = dp(6) })
+        top.addView(materialBtn("■ Стоп") { py.getModule("features").callAttr("interp_stop") }
+            .apply { textSize = 13f },
+            LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginStart = dp(6) })
+        root.addView(top)
 
         // история чата сохраняется при выходе и возврате на экран
         val chat = interpChat ?: LinearLayout(this).apply {
@@ -341,9 +358,7 @@ class MainActivity : ComponentActivity() {
         (chat.parent as? ViewGroup)?.removeView(chat)
         val scroll = ScrollView(this).apply { addView(chat) }
         interpScroll = scroll
-        root.addView(scroll, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
-        ))
+        root.addView(scroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
 
         val fileLabel = TextView(this).apply {
             setPadding(dp(8), dp(8), dp(8), dp(8))
@@ -351,32 +366,49 @@ class MainActivity : ComponentActivity() {
         }
         interpFileLabel = fileLabel
         root.addView(fileLabel)
-        root.addView(Button(this).apply {
-            text = "Открыть .py"
-            setOnClickListener { pickInterpFile() }
-        })
 
-        val input = EditText(this).apply { hint = "Код или ответ на input()" }
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        row.addView(input, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        row.addView(Button(this).apply {
-            text = "▶"
-            setOnClickListener { sendInterp(input) }
-        })
+        val input = TextInputEditText(this).apply {
+            imeOptions = EditorInfo.IME_ACTION_SEND
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            maxLines = 4
+        }
+        input.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEND) {
+                sendInterp(input)
+                true
+            } else false
+        }
+        val inputLayout = TextInputLayout(this).apply {
+            boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
+            addView(input)
+        }
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        row.addView(materialBtn("📎") { pickInterpFile() },
+            LinearLayout.LayoutParams(dp(56), dp(56)))
+        row.addView(inputLayout,
+            LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(materialBtn("▶") { sendInterp(input) },
+            LinearLayout.LayoutParams(dp(56), dp(56)))
         root.addView(row)
 
         setScreen(root)
         interpActive = true
         refreshInterpFile()
-        if (chat.childCount == 0) bubble("Напиши код или выбери файл.", right = false)
     }
 
     private fun bubble(text: String, right: Boolean) {
         val chat = interpChat ?: return
         val tv = TextView(this).apply {
             this.text = text
-            setTextIsSelectable(true)
             setPadding(dp(12), dp(8), dp(12), dp(8))
+            setOnLongClickListener {
+                copyToClipboard(text)
+                true
+            }
             background = GradientDrawable().apply {
                 cornerRadius = dp(12).toFloat()
                 setColor(if (right) Color.parseColor("#3B2F5C") else Color.parseColor("#2A2A33"))
@@ -395,8 +427,35 @@ class MainActivity : ComponentActivity() {
     private fun drainInterp() {
         val msgs = py.getModule("features").callAttr("interp_drain").asList()
         for (m in msgs) {
-            val pair = m.asList()
-            bubble(pair[0].toString(), right = false)
+            bubble(m.asList()[0].toString(), right = false)
+        }
+    }
+
+    private fun copyToClipboard(text: String) {
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("folyan", text))
+        Toast.makeText(this, "Скопировано", Toast.LENGTH_SHORT).show()
+    }
+
+    // Копирует всю историю чата (пузыри по порядку)
+    private fun copyChat() {
+        val chat = interpChat ?: return
+        val lines = (0 until chat.childCount).mapNotNull { idx ->
+            (chat.getChildAt(idx) as? TextView)?.text?.toString()
+        }
+        if (lines.isEmpty()) {
+            Toast.makeText(this, "Чат пуст", Toast.LENGTH_SHORT).show()
+            return
+        }
+        copyToClipboard(lines.joinToString("\n"))
+    }
+
+    // Возвращаем фокус и клавиатуру в поле, чтобы можно было писать сразу
+    private fun keepFocus(input: EditText) {
+        input.requestFocus()
+        input.post {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
         }
     }
 
@@ -411,23 +470,18 @@ class MainActivity : ComponentActivity() {
                 features.callAttr("interp_answer", text)
                 input.setText("")
             }
-            return
+        } else if (code != null) {
+            interpChat?.removeAllViews()
+            bubble(interpName, right = true)
+            if (text.isNotEmpty()) bubble(text, right = true)
+            input.setText("")
+            features.callAttr("interp_start", code, true, text.ifEmpty { null })
+        } else if (text.isNotEmpty()) {
+            bubble(text, right = true)
+            input.setText("")
+            features.callAttr("interp_start", text, false, null)
         }
-        when {
-            code != null -> {
-                interpChat?.removeAllViews()
-                bubble(interpName, right = true)
-                if (text.isNotEmpty()) bubble(text, right = true)
-                input.setText("")
-                features.callAttr("interp_start", code, true, text.ifEmpty { null })
-            }
-            text.isNotEmpty() -> {
-                bubble(text, right = true)
-                input.setText("")
-                features.callAttr("interp_start", text, false, null)
-            }
-            else -> bubble("Напиши код или выбери файл.", right = false)
-        }
+        keepFocus(input)
     }
 
     private fun pickInterpFile() {
@@ -469,7 +523,7 @@ class MainActivity : ComponentActivity() {
     private fun refreshInterpFile() {
         val label = interpFileLabel ?: return
         label.visibility = if (interpCode != null) View.VISIBLE else View.GONE
-        label.text = "$interpName  (нажми, чтобы убрать)"
+        label.text = interpName
     }
 
     private fun loadState(name: String): JSONObject = try {
@@ -513,7 +567,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showStego() {
-        setScreen(screen("Стенография") {
+        setScreen(screen("Стеганография") {
             val cover = field("Маскировка (обычный текст)", lines = 3)
             val secret = field("Что спрятать", lines = 2)
             val out = TextView(this@MainActivity).apply {
