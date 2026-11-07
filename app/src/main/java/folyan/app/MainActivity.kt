@@ -53,21 +53,16 @@ private val DOWNLOAD_FORMATS = listOf("mkv", "mp4", "wav", "mp3", "m4a", "opus")
 private val CONVERT_FORMATS = listOf("mp4", "mkv", "mp3", "wav", "m4a", "opus", "ogg", "flac", "aac")
 private val MERGE_FORMATS = listOf("mp4", "mkv")
 
-// Иконки из JetBrains Mono Nerd Font (Mono)
 private const val ICON_BACK = "\uF060"   // стрелка влево
 private const val ICON_CLIP = "\uF0C6"   // скрепка
-private const val ICON_SEND = "\uF04B"   // play / отправка
+private const val ICON_SEND = "\uF04B"   // отправка
 private const val ICON_TAG = "icon"
 
 class MainActivity : ComponentActivity() {
-
-    // Шрифт интерфейса: системный, без файла.
-    // Свой шрифт: положи .ttf в res/font/ и замени на ResourcesCompat.getFont(this, R.font.имя)
     private val uiFont: Typeface by lazy {
         ResourcesCompat.getFont(this, R.font.ui_font) ?: Typeface.DEFAULT
     }
 
-    // JetBrains Mono Nerd Font: только для интерпретатора
     private val appFont: Typeface by lazy {
         ResourcesCompat.getFont(this, R.font.jetbrains_nerd_mono) ?: Typeface.DEFAULT
     }
@@ -105,7 +100,64 @@ class MainActivity : ComponentActivity() {
             main.postDelayed(this, 300)
         }
     }
+    private var bvbAutomator: BvbAutomator? = null
+    private fun showBvb() {
+        val saved = loadState("bvb.json")
+        setScreen(screen("Авто-BvB") {
+            val phone = field("Телефон", saved.optString("phone", ""))
+            val pass = field("Пароль", saved.optString("pass", ""), password = true)
+            val logView = TextView(this@MainActivity).apply {
+                typeface = appFont
+                textSize = 12f
+                setPadding(dp(8), dp(8), dp(8), dp(8))
+                text = "Готов к запуску."
+            }
+            val scroll = ScrollView(this@MainActivity).apply {
+                addView(logView)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, dp(260)
+                )
+            }
 
+        button("Запустить") {
+            val ph = phone.text.toString().trim()
+            val ps = pass.text.toString().trim()
+            if (ph.isEmpty() || ps.isEmpty()) {
+                logView.text = "Введите логин и пароль"
+                return@button
+            }
+            val data = JSONObject().apply {
+                put("phone", ph)
+                put("pass", ps)
+            }
+            py.getModule("state").callAttr("save", "bvb.json", stateDir, data.toString())
+
+            logView.text = "Старт процесса..."
+            bvbAutomator?.stop()
+            bvbAutomator = BvbAutomator(
+                this@MainActivity,
+                content,
+                onLog = { msg ->
+                    main.post {
+                        logView.append("\n$msg")
+                        scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+                    }
+                },
+                onDone = {
+                    Toast.makeText(this@MainActivity, "Все задачи BvB закрыты!", Toast.LENGTH_LONG).show()
+                }
+            )
+            bvbAutomator?.start(ph, ps)
+        }
+
+        button("Остановить") {
+            bvbAutomator?.stop()
+            logView.append("\n[!] Остановлено")
+        }
+
+        addView(scroll)
+    })
+}
     override fun onCreate(savedInstanceState: Bundle?) {
         DynamicColors.applyIfAvailable(this)
         super.onCreate(savedInstanceState)
@@ -144,7 +196,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun applyFont(v: View) {
-        // иконки всегда рисуются шрифтом с глифами Nerd Font, остальной текст — uiFont
         if (v is TextView && v.tag != ICON_TAG) v.typeface = uiFont
         if (v is ViewGroup) for (i in 0 until v.childCount) applyFont(v.getChildAt(i))
     }
@@ -163,7 +214,6 @@ class MainActivity : ComponentActivity() {
         progressView = null
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            // Увеличиваем верхний отступ, чтобы кнопки были ниже
             setPadding(dp(20), dp(32), dp(20), dp(20))
         }
         if (!menu) box.addView(arrowBack { showMenu() })
@@ -181,7 +231,6 @@ class MainActivity : ComponentActivity() {
         return ScrollView(this).apply { addView(box) }
     }
 
-    // Монетка: смена цифры происходит СТРОГО в момент прохождения ребра (scaleX близко к 0)
     private fun LinearLayout.addCoin() {
         val size = dp(150)
         val card = MaterialCardView(this@MainActivity).apply {
@@ -230,9 +279,7 @@ class MainActivity : ComponentActivity() {
                         switchedInCurrentCycle = false
                     }
 
-                    // Меняем цифру строго в мертвой точке (когда монетка ребром s < 0.15)
                     if (s < 0.15f && !switchedInCurrentCycle) {
-                        // На финальном цикле принудительно ставим целевую сторону
                         currentSide = if (currentCycle >= 7) targetSide else if (currentSide == 0) 1 else 0
                         text.text = currentSide.toString()
                         switchedInCurrentCycle = true
@@ -343,13 +390,13 @@ class MainActivity : ComponentActivity() {
             button("Менеджер паролей") { showPasswords() }
             button("Стеганография") { showStego() }
             button("Качалка") { showDownloader() }
-            button("Конвертер") { showConverter() }
+            button("Конвертер") { showConverter()}
+            button("Авто-BvB") { showBvb() }
             button("Выход") { finish() }
         })
         atMenu = true
     }
 
-    // ---------- интерпретатор (чат, как в core.py) ----------
 
     private var interpActive = false
     private var interpChat: LinearLayout? = null
@@ -357,8 +404,6 @@ class MainActivity : ComponentActivity() {
     private var interpFileLabel: TextView? = null
     private var interpCode: String? = null
     private var interpName = ""
-
-    // Кнопка-иконка: без внутренних отступов Material, чтобы глиф не обрезался
     private fun iconButton(glyph: String, size: Int, onClick: () -> Unit): MaterialButton =
         MaterialButton(this).apply {
             text = glyph
@@ -433,7 +478,6 @@ class MainActivity : ComponentActivity() {
         row.addView(iconButton(ICON_CLIP, 56) { pickInterpFile() },
             LinearLayout.LayoutParams(dp(56), dp(56)))
         input.apply {
-            // одна высота с кнопками: TextInputLayout добавлял место снизу и сдвигал поле вверх
             minHeight = dp(56)
             setPadding(dp(16), 0, dp(16), 0)
             gravity = Gravity.CENTER_VERTICAL
@@ -448,7 +492,6 @@ class MainActivity : ComponentActivity() {
         row.addView(input,
             LinearLayout.LayoutParams(0, dp(56), 1f).apply { setMargins(dp(6), 0, dp(6), 0) })
         row.addView(iconButton(ICON_SEND, 56) { sendInterp(input) }.apply {
-            // зажатие ▶ останавливает выполнение кода
             setOnLongClickListener {
                 py.getModule("features").callAttr("interp_stop")
                 true
@@ -487,7 +530,6 @@ class MainActivity : ComponentActivity() {
         interpScroll?.post { interpScroll?.fullScroll(View.FOCUS_DOWN) }
     }
 
-    // Забираем вывод и запросы input() из Python
     private fun drainInterp() {
         val msgs = py.getModule("features").callAttr("interp_drain").asList()
         for (m in msgs) {
@@ -500,8 +542,6 @@ class MainActivity : ComponentActivity() {
         cm.setPrimaryClip(ClipData.newPlainText("folyan", text))
         Toast.makeText(this, "Скопировано", Toast.LENGTH_SHORT).show()
     }
-
-    // Возвращаем фокус и клавиатуру в поле, чтобы можно было писать сразу
     private fun keepFocus(input: EditText) {
         input.requestFocus()
         input.post {
