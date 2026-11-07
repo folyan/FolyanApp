@@ -1,17 +1,9 @@
 #!/usr/bin/env bash
-# Собирает libffmpeg.so для Android arm64.
-# Это исполняемый PIE-файл: приложение запускает его из nativeLibraryDir.
-#
-# GPL-сборка: включает libx264 (GPL-2.0-or-later). --enable-version3 НЕ используется,
-# чтобы не получить GPLv3 и не конфликтовать с GPLv2 приложения.
-#
-# Нужно: ANDROID_NDK_HOME (NDK r28c), curl, git, make, tar, xz.
-# Использование: ANDROID_NDK_HOME=/path/to/ndk ./ffmpeg/build_ffmpeg.sh
 set -euo pipefail
 
 : "${ANDROID_NDK_HOME:?задайте ANDROID_NDK_HOME}"
 
-API="${API:-24}"                       # minSdk из buildozer.spec
+API="${API:-24}"
 FFMPEG_VERSION="${FFMPEG_VERSION:-7.1}"
 LAME_VERSION="${LAME_VERSION:-3.100}"
 OPUS_VERSION="${OPUS_VERSION:-1.5.2}"
@@ -37,24 +29,48 @@ export STRIP="$BIN/llvm-strip"
 export NM="$BIN/llvm-nm"
 export CFLAGS="-O2 -fPIC"
 export CXXFLAGS="-O2 -fPIC"
-# ffmpeg ищет opus/vorbis/x264 через pkg-config. Ищем только в нашем prefix, системные .pc не нужны.
 export PKG_CONFIG_LIBDIR="$PREFIX/lib/pkgconfig"
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
 
 mkdir -p "$PREFIX" "$SRC" "$OUT"
 
-# Скачать и распаковать архив один раз. Имя каталога = имя архива без .tar.*
+# Умная функция загрузки с ретраями
+curl_download() {
+  local url=$1 dest=$2
+  curl -fsSL --connect-timeout 15 --retry 5 --retry-delay 3 --retry-all-errors "$url" -o "$dest"
+}
+
 fetch() {
   local url=$1 name
   name=$(basename "$url" | sed 's/\.tar\..*//')
   if [ ! -d "$SRC/$name" ]; then
-    curl -fsSL "$url" -o "$SRC/$name.tar"
-    tar -xf "$SRC/$name.tar" -C "$SRC"
+    echo "== Скачивание $name..."
+    curl_download "$url" "$SRC/$name.tar"
+    mkdir -p "$SRC/$name"
+    tar -xf "$SRC/$name.tar" --strip-components=1 -C "$SRC/$name"
   fi
 }
 
-# Зависимости собираем один раз; маркер лежит в prefix, поэтому кэш Actions его сохраняет.
-autotools_build() {  # name source-dir [configure args...]
+fetch_ffmpeg() {
+  local target_dir="$SRC/ffmpeg-$FFMPEG_VERSION"
+  if [ -d "$target_dir" ] && [ -f "$target_dir/configure" ]; then
+    return 0
+  fi
+
+  mkdir -p "$target_dir"
+  local primary_url="https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz"
+  local fallback_url="https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n${FFMPEG_VERSION}.tar.gz"
+
+  echo "== Скачивание FFmpeg: попытка с ffmpeg.org..."
+  if ! curl_download "$primary_url" "$SRC/ffmpeg.tar"; then
+    echo "==! Ошибка загрузки с ffmpeg.org. Переключаемся на GitHub..."
+    curl_download "$fallback_url" "$SRC/ffmpeg.tar"
+  fi
+
+  tar -xf "$SRC/ffmpeg.tar" --strip-components=1 -C "$target_dir"
+}
+
+autotools_build() {
   local name=$1 dir=$2
   shift 2
   if [ -f "$PREFIX/.$name.done" ]; then
@@ -90,7 +106,7 @@ build_x264() {
   touch "$PREFIX/.x264.done"
 }
 
-# ---- зависимости ffmpeg ----
+# ---- Зависимости ----
 fetch "https://downloads.sourceforge.net/project/lame/lame/${LAME_VERSION}/lame-${LAME_VERSION}.tar.gz"
 fetch "https://github.com/xiph/opus/releases/download/v${OPUS_VERSION}/opus-${OPUS_VERSION}.tar.gz"
 fetch "https://github.com/xiph/ogg/releases/download/v1.3.5/libogg-${OGG_VERSION}.tar.gz"
@@ -103,7 +119,6 @@ autotools_build vorbis "$SRC/libvorbis-$VORBIS_VERSION" \
   --with-ogg="$PREFIX" --disable-docs --disable-examples --disable-oggtest
 build_x264
 
-# Проверяем, что все .pc на месте, до запуска долгого configure
 command -v pkg-config >/dev/null || { echo "нет pkg-config: sudo apt-get install -y pkg-config"; exit 1; }
 for lib in opus vorbis ogg x264; do
   pkg-config --exists "$lib" || {
@@ -113,16 +128,10 @@ for lib in opus vorbis ogg x264; do
   }
 done
 
-# ---- ffmpeg ----
-fetch "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz"
+# ---- FFmpeg ----
+fetch_ffmpeg
 cd "$SRC/ffmpeg-$FFMPEG_VERSION"
 
-# Минимальная сборка: только то, что использует dl.py (download/convert/merge).
-# Всё остальное выключено: меньше кода в .so.
-#   вход: mov/mp4/m4a, matroska/webm, ogg/opus, mp3, wav, flac, aac (локальные файлы)
-#   выход: mp4, mkv, ogg (opus/vorbis), mp3, wav, flac, aac (adts), m4a (ipod)
-#   кодеки: h264/hevc/vp9 и aac/mp3/opus/vorbis/flac/pcm на вход; x264, lame, opus, vorbis, aac, flac, pcm на выход
-#   сеть не нужна: yt-dlp качает сам, ffmpeg работает только с локальными файлами
 ./configure \
   --prefix="$PREFIX" \
   --target-os=android --arch=aarch64 --enable-cross-compile \
@@ -152,6 +161,5 @@ make -j"$JOBS"
 cp ffmpeg "$OUT/libffmpeg.so"
 "$STRIP" --strip-unneeded "$OUT/libffmpeg.so"
 
-# Проверка: должен быть ELF для AArch64 типа DYN (PIE)
 "$BIN/llvm-readelf" -h "$OUT/libffmpeg.so" | grep -E 'Type|Machine'
 echo "Готово: $OUT/libffmpeg.so"
